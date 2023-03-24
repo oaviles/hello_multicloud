@@ -1,4 +1,4 @@
-name: 3 Deploy GCP Cloud Function
+name: 2 Deploy GCP Cloud Function
 
 on: workflow_dispatch
 
