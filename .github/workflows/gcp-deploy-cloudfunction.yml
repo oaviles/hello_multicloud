@@ -1,0 +1,28 @@
+name: 3 Deploy GCP Cloud Function
+
+on: workflow_dispatch
+
+env:
+  PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }} # TODO: update Google Cloud project id
+  FUNCTION_NAME: oapi # TODO: update Cloud Run service name
+  REGION: us-central1 # TODO: update Cloud Run service region
+  GCP_CREDENTIALS: ${{ secrets.GCP_CREDENTIALS }}
+
+jobs:
+  deploy-cloudfunction:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+        
+      - id: 'auth'
+        name: 'Authenticate to Google Cloud'
+        uses: 'google-github-actions/auth@v1'
+        with:
+          credentials_json: '${{ env.GCP_CREDENTIALS }}'
+ 
+      - name: Deploy a Cloud Function
+        id: 'deploy'
+        run: |- 
+          gcloud functions deploy ${{ env.FUNCTION_NAME }} --gen2 --runtime=nodejs18 --region=${{ env.REGION }} --source=./gcp-cloudfunction --entry-point=${{ env.FUNCTION_NAME }} --trigger-http --allow-unauthenticated
+ 

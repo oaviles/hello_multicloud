@@ -38,7 +38,7 @@ jobs:
         npm run test --if-present
         popd
 
-    - name: 'Deploy Azure Function Service'
+    - name: 'Deploy AZURE Function Service'
       uses: azure/CLI@v1
       with:
         inlineScript: |
