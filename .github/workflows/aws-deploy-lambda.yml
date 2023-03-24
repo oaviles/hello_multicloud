@@ -29,7 +29,7 @@ jobs:
           aws iam create-role --role-name ${{ env.ROLE_NAME }} --assume-role-policy-document '{"Version": "2012-10-17","Statement": [{ "Effect": "Allow", "Principal": {"Service": "lambda.amazonaws.com"}, "Action": "sts:AssumeRole"}]}'
           
           echo "attach-role-policy ..."
-          aws iam attach-role-policy --role-name ${{ env.ROLE_NAME }} --policy-arn arn:aws:iam::aws:policy/service-role/AWSLambda_FullAccess
+          aws iam attach-role-policy --role-name ${{ env.ROLE_NAME }} --policy-arn arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
           
           cd aws-lambda
           zip function.zip index.mjs
