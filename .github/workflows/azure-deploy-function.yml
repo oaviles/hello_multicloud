@@ -50,7 +50,7 @@ jobs:
 
           az functionapp create --name ${{ env.AZURE_FUNCTIONAPP_NAME }} --consumption-plan-location eastus --os-type Windows --resource-group ${{ env.AZURE_RG }} --runtime node --storage-account ${{ env.AZURE_STORAGE_NAME }} --functions-version 4           
 
-    - name: 'Deploy Azure Functions App'
+    - name: 'Deploy Azure Function App'
       uses: Azure/functions-action@v1
       with:
         app-name: ${{ env.AZURE_FUNCTIONAPP_NAME }}

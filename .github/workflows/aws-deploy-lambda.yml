@@ -1,0 +1,42 @@
+name: 3 Deploy AWS Lambda Function
+
+on: workflow_dispatch
+
+env:
+  AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+  AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+  AWS_REGION: us-west-2
+  LAMBDA_FUNCTION_NAME: oapi
+  AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
+  ROLE_NAME: lambda-oa-${{ github.run_number }}
+
+jobs:
+
+  aws-iac-lambda-function:
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout source code
+        uses: actions/checkout@v1
+      - name: aws autentication
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ env.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ env.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-west-2
+      - name: aws cli
+        run: |
+          echo "reate-role ..."
+          aws iam create-role --role-name ${{ env.ROLE_NAME }} --assume-role-policy-document '{"Version": "2012-10-17","Statement": [{ "Effect": "Allow", "Principal": {"Service": "lambda.amazonaws.com"}, "Action": "sts:AssumeRole"}]}'
+          
+          echo "attach-role-policy ..."
+          aws iam attach-role-policy --role-name ${{ env.ROLE_NAME }} --policy-arn arn:aws:iam::aws:policy/service-role/AWSLambda_FullAccess
+          
+          cd aws-lambda
+          zip function.zip index.mjs
+          
+          echo "create-function ..."
+          aws lambda create-function --function-name ${{ env.LAMBDA_FUNCTION_NAME }} --runtime nodejs18.x --handler index.handler --zip-file fileb://function.zip --role arn:aws:iam::${{ env.AWS_ACCOUNT_ID }}:role/lambda-oa
+
+          echo "create-url, expose function ..."
+          aws lambda add-permission --function-name ${{ env.LAMBDA_FUNCTION_NAME }} --action lambda:InvokeFunctionUrl --principal "*" --function-url-auth-type "NONE" --statement-id url
+          aws lambda create-function-url-config --function-name ${{ env.LAMBDA_FUNCTION_NAME }} --auth-type NONE
