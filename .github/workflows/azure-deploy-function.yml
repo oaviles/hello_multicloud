@@ -1,0 +1,57 @@
+name: 1 Deploy Azure Function App
+
+on: workflow_dispatch
+
+env:
+  AZURE_FUNCTIONAPP_NAME: oapi${{ github.run_number }}  # set this to your function app name on Azure
+  AZURE_FUNCTIONAPP_PACKAGE_PATH: 'azure-function'       # set this to the path to your function app project, defaults to the repository root
+  NODE_VERSION: '18'                      # set this to the node version to use (e.g. '8.x', '10.x', '12.x')
+  AZURE_CREDENTIALS: ${{ secrets.AZURE_CREDENTIALS }}
+  AZURE_STORAGE_NAME: oapi${{ github.run_number }}
+  AZURE_RG: oapi-${{ github.run_number }}
+  AZURE_REGION: eastus
+
+jobs:
+  deploying-azure-function:
+    runs-on: ubuntu-latest
+    steps:
+    
+    - name: Checkout
+      uses: actions/checkout@main
+    
+    - name: Azure Login
+      uses: azure/login@v1
+      with:
+        creds: ${{ env.AZURE_CREDENTIALS }}
+    
+    - name: Setup Node Version ${{ env.NODE_VERSION }}
+      uses: actions/setup-node@v2
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+        
+    - name: 'Build Azure Function App'
+      shell: bash
+      run: |
+        pushd './${{ env.AZURE_FUNCTIONAPP_PACKAGE_PATH }}'
+        npm install
+        npm run build --if-present
+        npm run test --if-present
+        popd
+
+    - name: 'Deploy Azure Function Service'
+      uses: azure/CLI@v1
+      with:
+        inlineScript: |
+          cd azure-function
+          zip function.zip *.*
+
+          az group create -l ${{ env.AZURE_REGION }} -n ${{ env.AZURE_RG }}
+          az storage account create -n ${{ env.AZURE_STORAGE_NAME }} -g ${{ env.AZURE_RG }} -l ${{ env.AZURE_REGION }} --sku Standard_LRS
+
+          az functionapp create --name ${{ env.AZURE_FUNCTIONAPP_NAME }} --consumption-plan-location eastus --os-type Windows --resource-group ${{ env.AZURE_RG }} --runtime node --storage-account ${{ env.AZURE_STORAGE_NAME }} --functions-version 4           
+
+    - name: 'Deploy Azure Functions App'
+      uses: Azure/functions-action@v1
+      with:
+        app-name: ${{ env.AZURE_FUNCTIONAPP_NAME }}
+        package: ${{ env.AZURE_FUNCTIONAPP_PACKAGE_PATH }}
