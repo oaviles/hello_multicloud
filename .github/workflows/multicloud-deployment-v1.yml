@@ -1,0 +1,115 @@
+
+name: Multi-Cloud Deployment V2
+
+on: workflow_dispatch
+
+env:
+  AZURE_FUNCTIONAPP_NAME: oapi${{ github.run_number }}  # set this to your function app name on Azure
+  AZURE_FUNCTIONAPP_PACKAGE_PATH: 'azure-function'       # set this to the path to your function app project, defaults to the repository root
+  NODE_VERSION: '18'                      # set this to the node version to use (e.g. '8.x', '10.x', '12.x')
+  AZURE_CREDENTIALS: ${{ secrets.AZURE_CREDENTIALS }}
+  AZURE_STORAGE_NAME: oapi${{ github.run_number }}
+  AZURE_RG: oapi-${{ github.run_number }}
+  AZURE_REGION: eastus
+
+  AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+  AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+  AWS_REGION: us-west-2
+  LAMBDA_FUNCTION_NAME: oapi
+  AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
+  ROLE_NAME: lambda-oa-${{ github.run_number }}
+  
+  PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }} # TODO: update Google Cloud project id
+  FUNCTION_NAME: oapi # TODO: update Cloud Run service name
+  REGION: us-central1 # TODO: update Cloud Run service region
+  #GCP_CREDENTIALS: ${{ secrets.GCP_CREDENTIALS }}
+
+jobs:
+
+  deploy-lambda-function:
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout source code
+        uses: actions/checkout@v1
+      - name: aws autentication
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ env.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ env.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-west-2
+      - name: aws cli
+        run: |
+          echo "reate-role ..."
+          aws iam create-role --role-name ${{ env.ROLE_NAME }} --assume-role-policy-document '{"Version": "2012-10-17","Statement": [{ "Effect": "Allow", "Principal": {"Service": "lambda.amazonaws.com"}, "Action": "sts:AssumeRole"}]}'
+          
+          echo "attach-role-policy ..."
+          aws iam attach-role-policy --role-name ${{ env.ROLE_NAME }} --policy-arn arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+          
+          cd aws-lambda
+          zip function.zip index.mjs
+          
+          echo "create-function ..."
+          aws lambda create-function --function-name ${{ env.LAMBDA_FUNCTION_NAME }} --runtime nodejs18.x --handler index.handler --zip-file fileb://function.zip --role arn:aws:iam::${{ env.AWS_ACCOUNT_ID }}:role/lambda-oa
+          echo "create-url, expose function ..."
+          aws lambda add-permission --function-name ${{ env.LAMBDA_FUNCTION_NAME }} --action lambda:InvokeFunctionUrl --principal "*" --function-url-auth-type "NONE" --statement-id url
+          aws lambda create-function-url-config --function-name ${{ env.LAMBDA_FUNCTION_NAME }} --auth-type NONE
+          
+  
+  deploy-cloudfunction:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+        
+      - id: 'auth'
+        name: 'Authenticate to Google Cloud'
+        uses: 'google-github-actions/auth@v1'
+        with:
+          credentials_json: '${{ secrets.GCP_CREDENTIALS }}'
+ 
+      - name: Deploy a Cloud Function
+        id: 'deploy'
+        run: |- 
+          gcloud functions deploy ${{ env.FUNCTION_NAME }} --gen2 --runtime=nodejs18 --region=${{ env.REGION }} --source=./gcp-cloudfunction --entry-point=${{ env.FUNCTION_NAME }} --trigger-http --allow-unauthenticated
+ 
+   
+  deploy-azure-function:
+    runs-on: ubuntu-latest
+    steps:
+    
+    - name: Checkout
+      uses: actions/checkout@main
+    
+    - name: Azure Login
+      uses: azure/login@v1
+      with:
+        creds: ${{ env.AZURE_CREDENTIALS }}
+    
+    - name: Setup Node ${{ env.NODE_VERSION }} Environment
+      uses: actions/setup-node@v2
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+        
+    - name: 'Resolve Project Dependencies Using Npm'
+      shell: bash
+      run: |
+        pushd './${{ env.AZURE_FUNCTIONAPP_PACKAGE_PATH }}'
+        npm install
+        npm run build --if-present
+        npm run test --if-present
+        popd
+    - name: Azure CLI script
+      uses: azure/CLI@v1
+      with:
+        inlineScript: |
+          cd azure-function
+          zip function.zip *.*
+          az group create -l ${{ env.AZURE_REGION }} -n ${{ env.AZURE_RG }}
+          az storage account create -n ${{ env.AZURE_STORAGE_NAME }} -g ${{ env.AZURE_RG }} -l ${{ env.AZURE_REGION }} --sku Standard_LRS
+          az functionapp create --name ${{ env.AZURE_FUNCTIONAPP_NAME }} --consumption-plan-location eastus --os-type Windows --resource-group ${{ env.AZURE_RG }} --runtime node --storage-account ${{ env.AZURE_STORAGE_NAME }} --functions-version 4 
+          
+    - name: 'Run Azure Functions action'
+      uses: Azure/functions-action@v1
+      with:
+        app-name: ${{ env.AZURE_FUNCTIONAPP_NAME }}
+        package: ${{ env.AZURE_FUNCTIONAPP_PACKAGE_PATH }}
