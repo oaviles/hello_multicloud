@@ -1,5 +1,5 @@
 
-name: Multi-Cloud Deployment V2
+name: Multi-Cloud Deployment V1
 
 on: workflow_dispatch
 
