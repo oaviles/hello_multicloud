@@ -83,7 +83,7 @@ jobs:
           aws lambda create-function-url-config --function-name ${{ env.LAMBDA_FUNCTION_NAME }} --auth-type NONE
           
   
-  deploy-cloudfunction:
+  deploy-cloud-function:
     runs-on: ubuntu-latest
     if: ${{ success() }}
     needs: deploy-iac-apim
